@@ -1,0 +1,112 @@
+{
+  "name": "Tool: Web Search",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "workflow-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet query = input.query || '';\nlet maxResults = 5;\n\n// Si es JSON, parsearlo\ntry {\n  const data = JSON.parse(query);\n  query = data.query || query;\n  maxResults = Number(data.max_results) || 5;\n} catch(e) {\n  // No es JSON, usar directamente\n}\n\nreturn [{ json: { query, maxResults } }];"
+      },
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [350, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.duckduckgo.com/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "no_html",
+              "value": "1"
+            },
+            {
+              "name": "skip_disambig",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-duckduckgo",
+      "name": "DuckDuckGo Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "let input = $input.first().json;\nconst parseInput = $('Parse Input').first().json;\nconst query = parseInput.query;\nconst maxResults = parseInput.maxResults;\n\n// Si los datos vienen como string en 'data', parsear\nif (typeof input.data === 'string') {\n  try {\n    input = JSON.parse(input.data);\n  } catch(e) {}\n}\n\nconst results = [];\n\nif (input.Abstract) {\n  results.push({\n    title: input.Heading || 'Resultado',\n    snippet: input.Abstract,\n    url: input.AbstractURL || ''\n  });\n}\n\nif (input.RelatedTopics && Array.isArray(input.RelatedTopics)) {\n  for (const topic of input.RelatedTopics.slice(0, maxResults - results.length)) {\n    if (topic.Text) {\n      results.push({\n        title: topic.Text.substring(0, 100),\n        snippet: topic.Text,\n        url: topic.FirstURL || ''\n      });\n    }\n  }\n}\n\nreturn [{\n  json: {\n    success: true,\n    query: query,\n    count: results.length,\n    results: results.slice(0, maxResults)\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "DuckDuckGo Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DuckDuckGo Search": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "versionId": "2"
+}

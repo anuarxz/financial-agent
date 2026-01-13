@@ -1,0 +1,95 @@
+{
+  "name": "Tool: Query Records",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "workflow-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst data = JSON.parse(input.query);\n\nconst table = data.table || 'expenses';\nconst limit = Number(data.limit) || 10;\nconst category = data.category || '';\nconst goal = data.goal || '';\nconst asset_type = data.asset_type || '';\n\nlet whereClause = '';\nif (table === 'expenses' && category) {\n  whereClause = \" WHERE category ILIKE '%\" + category + \"%'\";\n} else if (table === 'savings' && goal) {\n  whereClause = \" WHERE goal ILIKE '%\" + goal + \"%'\";\n} else if (table === 'investments' && asset_type) {\n  whereClause = \" WHERE asset_type ILIKE '%\" + asset_type + \"%'\";\n}\n\nconst sql = 'SELECT * FROM ' + table + whereClause + ' ORDER BY created_at DESC LIMIT ' + limit;\n\nreturn [{ json: { sql, table } }];"
+      },
+      "id": "build-query",
+      "name": "Build Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "postgres-query",
+      "name": "PostgreSQL Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [600, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-credential",
+          "name": "PostgreSQL Financial Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst records = items.map(item => item.json);\n\nreturn [{\n  json: {\n    success: true,\n    count: records.length,\n    records: records\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL Query": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "versionId": "2"
+}

@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: financial_agent
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: financial_agent
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      MODEL_NAME: ${MODEL_NAME:-gemini/gemini-2.5-flash}
+      REASONING_EFFORT: ${REASONING_EFFORT:-low}
+      # API Keys - LiteLLM 
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+
+  cli:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: financial_agent
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      MODEL_NAME: ${MODEL_NAME:-gemini/gemini-2.5-flash}
+      REASONING_EFFORT: ${REASONING_EFFORT:-low}
+      # API Keys - LiteLLM
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    stdin_open: true
+    tty: true
+    command: ["python", "cli.py"]
+    profiles:
+      - cli
+
+volumes:
+  postgres_data:

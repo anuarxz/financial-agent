@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: financial-agent-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-financial_agent}
+    ports:
+      - "${DATABASE_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgrest:
+    image: postgrest/postgrest:latest
+    container_name: financial-agent-postgrest
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@db:5432/${DATABASE_NAME:-financial_agent}
+      PGRST_DB_ANON_ROLE: postgres
+      PGRST_DB_SCHEMA: public
+      PGRST_SERVER_PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: financial-agent-n8n
+    restart: unless-stopped
+    environment:
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+
+      - DB_TYPE=sqlite
+      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite
+
+      - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Madrid}
+      - TZ=${TIMEZONE:-Europe/Madrid}
+
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
+
+      - N8N_AI_ENABLED=true
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflow.json:/home/node/workflows/workflow.json:ro
+      - ./workflow-tool-insert.json:/home/node/workflows/workflow-tool-insert.json:ro
+      - ./workflow-tool-query.json:/home/node/workflows/workflow-tool-query.json:ro
+      - ./workflow-tool-search.json:/home/node/workflows/workflow-tool-search.json:ro
+      - ./workflow-unified.json:/home/node/workflows/workflow-unified.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      postgrest:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  default:
+    name: financial-agent-network

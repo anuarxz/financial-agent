@@ -1,0 +1,95 @@
+{
+  "name": "Tool: Insert Record",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "workflow-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst data = JSON.parse(input.query);\n\nconst table = data.table || 'expenses';\nconst amount = Number(data.amount) || 0;\n\nlet field = 'category';\nlet value = data.category || '';\n\nif (table === 'savings') {\n  field = 'goal';\n  value = data.goal || '';\n} else if (table === 'investments') {\n  field = 'asset_type';\n  value = data.asset_type || '';\n}\n\nconst sql = 'INSERT INTO ' + table + ' (amount, ' + field + ') VALUES (' + amount + ', \\'' + value + '\\') RETURNING *';\n\nreturn [{ json: { sql, table, amount, field, value } }];"
+      },
+      "id": "parse-query",
+      "name": "Parse Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "postgres-insert",
+      "name": "PostgreSQL Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [600, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-credential",
+          "name": "PostgreSQL Financial Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length > 0 && items[0].json) {\n  const record = items[0].json;\n  return [{\n    json: {\n      success: true,\n      message: 'Registro insertado correctamente',\n      record: record\n    }\n  }];\n}\nreturn [{ json: { success: false, error: 'No se pudo insertar' } }];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Query": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL Insert": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "versionId": "9"
+}

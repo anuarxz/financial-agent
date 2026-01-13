@@ -1,0 +1,226 @@
+{
+  "name": "Financial Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "financial-agent-chat"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.message }}",
+        "options": {
+          "systemMessage": "# Identidad\nEres un asistente financiero inteligente que ayuda a los usuarios a gestionar sus finanzas personales.\n\nIMPORTANTE: DEBES usar las herramientas disponibles para realizar acciones. NUNCA digas que has hecho algo sin usar la herramienta correspondiente.\n\n# Herramientas disponibles\n1. insert_record - Para registrar gastos, ahorros o inversiones\n2. query_records - Para consultar registros existentes\n3. web_search - Para buscar información en internet\n\n# FORMATO DE PARÁMETROS (MUY IMPORTANTE)\n- amount: SOLO el número, SIN unidades. Ejemplo: 50 (NO \"50 euros\")\n- table: \"expenses\", \"savings\" o \"investments\"\n- category/goal/asset_type: texto simple\n\n# Reglas de uso\n- GASTO: insert_record con table=\"expenses\", amount=NUMBER, category=STRING\n- AHORRO: insert_record con table=\"savings\", amount=NUMBER, goal=STRING\n- INVERSIÓN: insert_record con table=\"investments\", amount=NUMBER, asset_type=STRING\n- VER registros: query_records con table=\"expenses\"/\"savings\"/\"investments\"\n- BUSCAR info: web_search con query=STRING\n\nSi falta información, pregunta. Responde conciso.",
+          "maxIterations": 10
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "model": "gemini-2.0-flash",
+        "options": {}
+      },
+      "id": "chat-model",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [400, 500],
+      "credentials": {
+        "googleGeminiApi": {
+          "id": "google-gemini-credential",
+          "name": "Google Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "insert_record",
+        "description": "Inserta un nuevo registro financiero en la base de datos. Usa esta herramienta para registrar gastos, ahorros o inversiones.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"table\": \"expenses\",\n  \"amount\": 50,\n  \"category\": \"comida\",\n  \"goal\": \"vacaciones\",\n  \"asset_type\": \"acciones\",\n  \"description\": \"opcional\"\n}"
+      },
+      "id": "tool-insert",
+      "name": "Tool: Insert Record",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [550, 500]
+    },
+    {
+      "parameters": {
+        "name": "query_records",
+        "description": "Consulta registros financieros existentes de la base de datos. Usa esta herramienta para ver gastos, ahorros o inversiones guardados.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"table\": \"expenses\",\n  \"category\": \"comida\",\n  \"limit\": 10\n}"
+      },
+      "id": "tool-query",
+      "name": "Tool: Query Records",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [700, 500]
+    },
+    {
+      "parameters": {
+        "name": "web_search",
+        "description": "Busca informaci\u00f3n financiera en internet. Usa esta herramienta para obtener datos actualizados sobre mercados, inversiones, consejos financieros, etc.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"query\": \"precio bitcoin hoy\",\n  \"max_results\": 5\n}"
+      },
+      "id": "tool-search",
+      "name": "Tool: Web Search",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [850, 500]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.body.sessionId || 'default' }}",
+        "options": {}
+      },
+      "id": "memory",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [450, 650]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"response\": $json.output } }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Chat Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Insert Record": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Query Records": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: Web Search": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "financial",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "ai-agent",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "pinData": {},
+  "versionId": "1"
+}
