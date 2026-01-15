@@ -33,6 +33,8 @@ make docker-cli
 .\make.bat docker-cli
 ```
 
+![Agente](./assets/agente.PNG)
+
 ### n8n
 
 ```bash
